@@ -1,0 +1,1461 @@
+{% extends 'home/base.html' %}
+
+{% block title %}Pedagogical Helper Tool{% endblock %}
+
+{% block breadcrumb %}
+<ul class="breadcrumb">
+  <li>
+    <i class="icon-home"></i>
+    <a href="/mycourses">My Courses</a>
+    <i class="icon-angle-right"></i>
+  </li>
+  <li>Pedagogical Helper Tool</li>
+</ul>
+{% endblock %}
+
+{% block body_block %}
+			<div class="row-fluid">
+
+          <div class="box span12">
+  					<div class="box-header">
+  						<h2><i class="halflings-icon list"></i><span class="break"></span>Pedagogy Helper Tool</h2>
+  					</div>
+  					<div class="box-content">
+  						<ul class="nav tab-menu nav-tabs" id="myTab">
+                <li class="active"><a href="#treeview">Treeview</a></li>
+                <li><a href="#dendogram" onClick="renderDendogram()">Dendogram</a></li>
+  						</ul>
+
+  						<div id="myTabContent" class="tab-content">
+                <div class="tab-pane active" id="treeview">
+                  <h1>Learning Objectives, Learning Activities and Learning Resources Mapper</h1>
+                  <div class="box-icon">
+                    <p>
+                      <a href="#" onClick="WordExportSubmit()" class="btn btn-small"><i class="halflings-icon download-alt"></i> Export to Word</a>
+                    </p>
+                  </div>
+                  <div class="control-group">
+                      <div class="controls">
+                        <input id="loInput" type="text" value="Learning Objective" maxlength="160" size="160"> <button class="btn btn-small btn-primary" onClick="addlo_btnclicked()">Add</button>
+                      </div>
+                  </div>
+                  <div id="los">
+                    <ol id="los_ol">
+                    </ol>
+                    <!--
+                    <table id='tbl' border="1">
+                      <tr>
+                         <th>Learning Objectives</th>
+                         <th>Learning Activities</th>
+                         <th>Learning Resources</th>
+                       </tr>
+                       <tbody>
+                       </tbody>
+
+                    </table>
+                    -->
+                  </div>
+                  <form id="jsonform" name="json" method="post" action="/pedagogyhelper/">
+                    {% csrf_token %}
+                  <input type="hidden" name="course_id" value="{{course_id}}" />
+                  <input type="hidden" id="pedagogyhelper_json" name="pedagogyhelper_json" value="{}" />
+                  <button class="btn btn-small btn-primary" onClick="saveJSON()">Save</button>
+                  </form>
+                  <form id="exportwordform" name="word" method="post" action="/pedagogyhelperdownload/">
+                    {% csrf_token %}
+                  <input type="hidden" name="course_id" value="{{course_id}}" />
+                  <input type="hidden" id="pedagogyhelper_exportjson" name="pedagogyhelper_exportjson" value="{}" />
+                  </form>
+                </div>
+                <div class="tab-pane" id="dendogram">
+                  <div class="box-icon">
+                    <p>
+                      <a href="#" id="imagedownload" class="btn btn-small"><i class="halflings-icon download-alt"></i> Export as Image (png)</a>
+                    </p>
+                  </div>
+                  <div id="tree-container"></div>
+                </div>
+  						</div>
+  					</div>
+  				</div><!--/span-->
+
+      </div><!--/row-->
+      <div class="row-fluid">
+        <!-- Modal -->
+<div id="myModal" class="modal fade" role="dialog">
+  <div class="modal-dialog">
+
+    <!-- Modal content-->
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal">&times;</button>
+        <h4 class="modal-title">Learning Resource Selector</h4>
+      </div>
+      <div class="modal-body">
+        <input type="text" value="" id="treesearch" placeholder="Search">
+        <div id="jstree_demo_div"></div>
+      </div>
+      <div class="modal-footer">
+        Selected Resource: <div id="selected_resource">None</div> <input id="selected_id" type="hidden" value="-1" />
+        <button type="button" class="btn btn-default" onClick="closeModal();">Select</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+      </div><!--/row-->
+
+{% endblock %}
+
+{% block javascript %}
+		<script src="/static/js/custom.js"></script>
+    <script src="/static/js/jstree.min.js"></script>
+    <script src="/static/js/d3.v3.min.js"></script>
+    <script src="/static/js/saveSvgAsPng.js"></script>
+    <script>
+
+    function downloadCanvas(link, canvasId, filename) {
+        link.href = document.getElementById(canvasId).toDataURL();
+        link.download = filename;
+    }
+
+    document.getElementById('imagedownload').addEventListener('click', function() {
+        //downloadCanvas(this, 'tree-container', 'pedagogyhelper.png');
+        saveSvgAsPng($('.overlay')[0], "pedagogyhelper.png");
+    }, false);
+
+    var lo_count = 0;
+    var la_counts = [];
+    var la_txtvals = new Object();
+    var lr_count = new Object();
+    var resources_from_tree = [];
+    var currLoLa_id = 0;
+
+    //var data = {"courseresources":[{"id":"107916","title":"Schedule (section)"}],"uniquelearningactivities":{"1":"Learning Activity"},"learningobjects":[{"id":"1","name":"Hello","learningactivities":[]}]}
+
+    var data = {{pedagogyhelper_json|safe}}
+
+    function addlo_btnclicked()
+    {
+      var lo_txt = $('#loInput').val();
+      addlo(lo_txt);
+      $('#loInput').val("Learning Objective");
+    }
+
+    function addlo(lo_txt)
+    {
+      lo_count = lo_count + 1;
+      var lo_html = '<li id="lo_' + lo_count + '"> <input id="loInput_' + lo_count + '" type="text" value="' + lo_txt + '" maxlength="160" size="160">';
+      lo_html += '<button class="btn btn-small btn-primary" onClick="removelo(' + lo_count + ')"><i class="halflings-icon remove"></i> Remove</button>';
+      lo_html += '<ol id="la_' + lo_count + '">';
+      lo_html += '<input id="addla_' + lo_count + '" type="text" value="Learning Activity" maxlength="160" size="160">';
+      lo_html += ' OR Select Existing ';
+      lo_html += ' <select id="laselect_' + lo_count + '"> </select>';
+      lo_html += '<button class="btn btn-small btn-primary" onClick="addla_btnclicked(' + lo_count + ')">Add</button>';
+      lo_html += '</ol>';
+      lo_html += '</li>';
+
+      $( "#los_ol" ).append( lo_html );
+      init_laselect('#laselect_' + lo_count);
+      la_counts.push(0);
+      //console.log(la_counts);
+    }
+
+    function removelo(lo_no)
+    {
+      $('#lo_'+lo_no).remove();
+      la_counts.splice(lo_no-1, 1);
+      //console.log(la_counts);
+    }
+
+    function addla_btnclicked(lo_no)
+    {
+      la_counts[lo_no-1] += 1;
+      var la_no = la_counts[lo_no-1];
+      var la_txt = $('#addla_' + lo_no).val();
+      var drop_txt = $( "#laselect_" + lo_no ).val();
+      var refid = 0;
+      if (drop_txt != "None")
+      {
+          la_txt = la_txtvals[drop_txt];
+          refid = drop_txt;
+      }
+      else {
+        la_txtvals[la_no] = la_txt;
+        bind_laselect(la_no, la_txt);
+      }
+      $('#addla_' + lo_no).val("Learning Activity");
+      $("#laselect_" + lo_no).val('None');
+      addla(lo_no, la_txt, refid)
+    }
+
+    function addla(lo_no, name, refid)
+    {
+      la_no = la_counts[lo_no-1];
+
+      var la_html = '<li id="' + lo_no + '_' + la_no + '"> <input type="hidden" id="lahiddenInput_' + lo_no + '_' + la_no + '" value="' + refid + '"><input id="laInput_' + lo_no + '_' + la_no + '" type="text" value="' + name + '" maxlength="160" size="160">';
+      la_html += '<button class="btn btn-small btn-primary" onClick="removela(' + lo_no + ','+ la_no + ')"><i class="halflings-icon remove"></i> Remove</button>';
+      la_html += '<ol id="lr_' + lo_no + '_' + la_no + '">';
+      la_html += '<input id="addlr_' + la_no + '" type="text" value="Learning Resource" maxlength="160" size="160">';
+      la_html += '<button class="btn btn-small btn-primary" onClick="addlr_btnclicked(' + lo_no + ','+ la_no + ',\'\')">Add</button>';
+      la_html += 'or <button onClick="showModal(\'' + lo_no + '_' + la_no + '\')" type="button" class="btn btn-info btn-small" >Course Structure</button>';
+      la_html += '</ol>';
+      $( "#la_" + lo_no ).append( la_html );
+      lr_count[lo_no + "_" + la_no] = 0;
+
+      //console.log(la_counts);
+      //console.log(la_txtvals);
+    }
+
+    function removela(lo_no, la_no)
+    {
+      $('#'+lo_no+"_"+la_no).remove();
+      la_counts[lo_no-1] -= 1;
+      //console.log(la_counts);
+    }
+
+    function addlr_btnclicked(lo_no, la_no)
+    {
+      lr_count[lo_no + "_" + la_no] += 1;
+      lr_no = lr_count[lo_no + "_" + la_no];
+      var lr_txt = $('#addlr_' + la_no).val();
+
+      $('#addlr_' + la_no).val("Learning Resource");
+
+      addlr(lo_no, la_no, lr_txt, -1)
+
+    }
+
+    function addlr(lo_no, la_no, lr_txt, lr_tree_id)
+    {
+      console.log('addlr');
+      lr_no = lr_count[lo_no + "_" + la_no];
+
+      console.log(lo_no + "_" + la_no);
+      console.log(lr_count);
+
+      var lr_html = '<li id="' + lo_no + '_' + la_no +  '_' + lr_no + '">';
+      if (lr_tree_id == -1)
+      {
+        lr_html += '<input id="lrInput_' + lo_no + '_' + la_no + '_' + lr_no +  '" type="text" value="' + lr_txt + '" maxlength="160" size="160">';
+      }
+      else {
+        lr_html += '<input id="lrInput_' + lo_no + '_' + la_no + '_' + lr_no +  '" type="hidden" value="' + lr_tree_id + '" >' + '<span id="lrTxt_' + lo_no + '_' + la_no + '_' + lr_no +  '">'+ lr_txt + '</span>';
+      }
+      lr_html += '<button class="btn btn-small btn-primary" onClick="removelr(' + lo_no + ','+ la_no + ','+ lr_no + ')"><i class="halflings-icon remove"></i> Remove</button>';
+      $( "#lr_" + lo_no + '_' + la_no ).append( lr_html );
+      //console.log(la_counts);
+      //console.log(lr_count);
+      //console.log(resources_from_tree);
+    }
+
+    function removelr(lo_no, la_no, lr_no)
+    {
+      $('#'+lo_no+"_"+la_no+"_"+lr_no).remove();
+      lr_count[lo_no + "_" + la_no] -= 1;
+      //console.log(lr_count);
+    }
+
+    function WordExportSubmit()
+    {
+      saveJSON();
+      $("#exportwordform").submit();
+    }
+
+    function saveJSONsubmit()
+    {
+      saveJSON();
+      //alert($('#pedagogyhelper_json').val());
+      $("#jsonform").submit();
+
+    }
+
+    function makeDendogramTree()
+    {
+      var newTree = {};
+
+      newTree.name = "Learning Objectives";
+
+      var learningobjects = [];
+
+      $('#los_ol > li').each(function(){
+        var learningobject = {};
+        learningobject.id = $(this).attr('id').substring(3);
+        learningobject.name = $('#loInput_'+learningobject.id).val();
+
+        learningobject.children = [];
+
+        //$(this).find('ol > li').each(function(){
+        $('#la_' + learningobject.id + ' > li').each(function(){
+          //console.log(this)
+          var learningactivity = {};
+          learningactivity.id = learningobject.id + "_" + $(this).attr('id').split("_")[1];
+          la_id = $(this).attr('id').split("_")[1];
+          learningactivity.refid = $('#lahiddenInput_'+learningobject.id + '_' + la_id).val();
+          learningactivity.name = $('#laInput_'+learningobject.id + '_' + la_id).val();
+
+          learningactivity.children = []
+          // learning resource level
+          $('#lr_' + learningobject.id + '_' + la_id + ' > li').each(function(){
+            var learningresource = {};
+            var htmlid = $(this).attr('id').split("_")[2];
+            //console.log(htmlid);
+            learningresource.name = $('#lrTxt_'+ learningobject.id + '_' + la_id + '_' + htmlid).html();
+            learningresource.id = 0;
+            if (learningresource.name === undefined)
+            {
+              learningresource.id = 0;
+              learningresource.name = $('#lrInput_'+ learningobject.id + '_' + la_id + '_' + htmlid).val();
+            }
+            else {
+              learningresource.id = $('#lrInput_'+ learningobject.id + '_' + la_id + '_' + htmlid).val();
+            }
+            //console.log(learningresource);
+            learningactivity.children.push(learningresource);
+          });
+
+          learningobject.children.push(learningactivity);
+        });
+
+        learningobjects.push(learningobject);
+      });
+
+      newTree.children = learningobjects;
+      //newTree =  "{" + JSON.stringify(learningobjects) + "}";
+      treeData = newTree;
+      //alert(JSON.stringify(newTree));
+    }
+
+    function saveJSON()
+    {
+
+      var pedagogyhelper = {};
+
+      pedagogyhelper.courseresources = [];
+      pedagogyhelper.courseresources = resources_from_tree;
+
+      pedagogyhelper.uniquelearningactivities = la_txtvals;
+
+      var learningobjects = [];
+
+      $('#los_ol > li').each(function(){
+        var learningobject = {};
+        learningobject.id = $(this).attr('id').substring(3);
+        learningobject.name = $('#loInput_'+learningobject.id).val();
+
+        learningobject.learningactivities = [];
+
+        //$(this).find('ol > li').each(function(){
+        $('#la_' + learningobject.id + ' > li').each(function(){
+          console.log(this)
+          var learningactivity = {};
+          learningactivity.id = $(this).attr('id').split("_")[1];
+          learningactivity.refid = $('#lahiddenInput_'+learningobject.id + '_' + learningactivity.id).val();
+          learningactivity.name = $('#laInput_'+learningobject.id + '_' + learningactivity.id).val();
+
+          learningactivity.learningresources = []
+          // learning resource level
+          $('#lr_' + learningobject.id + '_' + learningactivity.id + ' > li').each(function(){
+            var learningresource = {};
+            var htmlid = $(this).attr('id').split("_")[2];
+            console.log(htmlid);
+            learningresource.name = $('#lrTxt_'+ learningobject.id + '_' + learningactivity.id+ '_' + htmlid).html();
+            learningresource.id = 0;
+            if (learningresource.name === undefined)
+            {
+              learningresource.id = 0;
+              learningresource.name = $('#lrInput_'+ learningobject.id + '_' + learningactivity.id+ '_' + htmlid).val();
+            }
+            else {
+              learningresource.id = $('#lrInput_'+ learningobject.id + '_' + learningactivity.id+ '_' + htmlid).val();
+            }
+            console.log(learningresource);
+            learningactivity.learningresources.push(learningresource);
+          });
+
+          learningobject.learningactivities.push(learningactivity);
+        });
+
+        learningobjects.push(learningobject);
+      });
+
+      pedagogyhelper.learningobjects = [];
+      pedagogyhelper.learningobjects = learningobjects;
+
+      var learningobjectsJson = JSON.stringify(pedagogyhelper);
+      //console.log(learningobjectsJson);
+      //alert(learningobjectsJson);
+      $('#pedagogyhelper_json').val(learningobjectsJson);
+      $('#pedagogyhelper_exportjson').val(learningobjectsJson);
+      //alert(learningobjectsJson);
+
+    }
+
+    function init_laselect(selectid)
+    {
+      //console.log("bind to " + selectid);
+      var dropdown = $(selectid);
+      dropdown.append('<option value="None">-</option>');
+      $.each(la_txtvals, function(val, text) {
+        dropdown.append(
+        $('<option></option>').val(val).html(text)
+        );
+      });
+    }
+
+    function bind_laselect(val, la_txt)
+    {
+      var dropdowns = $("[id^=laselect_]")
+      dropdowns.append($('<option></option>').val(val).html(la_txt));
+    }
+
+    function showModal(id)
+    {
+      currLoLa_id = id;
+      $('#myModal').modal("show");
+      $('#jstree_demo_div')
+      // listen for event
+      .on('changed.jstree', function (e, data) {
+        var i, j, r = [], ids = [];
+        for(i = 0, j = data.selected.length; i < j; i++) {
+          console.log(data.instance.get_node(data.selected[i]));
+          r.push(data.instance.get_node(data.selected[i]).text);
+          ids.push(data.instance.get_node(data.selected[i]).id);
+        }
+        $('#selected_resource').html(r.join(', '));
+        $('#selected_id').val(ids.join(', '));
+      })
+      // create the instance
+      .jstree({ 'core' : {
+        'data' : [
+       {{json_4_jstree|safe}}
+        ]
+        },"plugins" : ["search"] });
+
+      var to = false;
+      $('#treesearch').keyup(function () {
+        if(to) { clearTimeout(to); }
+        to = setTimeout(function () {
+          var v = $('#treesearch').val();
+          $('#jstree_demo_div').jstree(true).search(v);
+        }, 250);
+      });
+    }
+
+    function closeModal()
+    {
+        $('#myModal').modal("hide");
+        var selected_resource = $('#selected_resource').html();
+        var lr_tree_id = $('#selected_id').val();
+        ids = currLoLa_id.split("_");
+        resources_from_tree.push({id: lr_tree_id, title: selected_resource});
+        lr_count[ids[0] + "_" + ids[1]] += 1;
+        addlr(ids[0], ids[1], selected_resource, lr_tree_id)
+        $('#selected_resource').html("None");
+        $('#selected_id').val(-1);
+        //$('#jstree_demo_div').destroy();
+        //console.log("selected_resource: " + selected_resource)
+    }
+
+    function load_data()
+    {
+      //console.log(data.courseresources);
+      //console.log(data.uniquelearningactivities);
+      la_txtvals = data.uniquelearningactivities;
+      resources_from_tree = data.courseresources;
+      var learningobjects = data.learningobjects;
+      //console.log(learningobjects);
+      //console.log(data.learningobjects[0]);
+      for (loobj in learningobjects)
+      {
+        // Add LO
+        //console.log("LO -");
+        //console.log(loobj);
+        //alert(learningobjects[loobj].name)
+        addlo(learningobjects[loobj].name);
+        var lo_no = learningobjects[loobj].id;
+        var learningactivities = learningobjects[loobj].learningactivities
+        for (laobj in learningactivities)
+        {
+          // ADD LA
+          //console.log(learningactivities[laobj]);
+          var la_no = learningactivities[laobj].id;
+          //alert(learningactivities[laobj].name)
+
+          la_counts[lo_no-1] += 1;
+
+          if (learningactivities[laobj].refid == "0")
+          {
+            la_txtvals[la_no] = learningactivities[laobj].name;
+            //bind_laselect(la_no, learningactivities[laobj].name);
+            //console.log("after bind_laselect ");
+          }
+
+          addla(lo_no, learningactivities[laobj].name,learningactivities[laobj].refid);
+          //console.log(learningactivities[laobj].learningresources)
+          var learningresources = learningactivities[laobj].learningresources;
+          for (lrobj in learningresources)
+          {
+            // ADD LR
+            //console.log(lrobj)
+            //addlr(lo_no, la_no, lr_txt, lr_tree_id)
+            //alert(learningresources[lrobj].name + " " + lo_no + " " + la_no + " " + learningresources[lrobj].id)
+
+            lr_count[lo_no + "_" + la_no] += 1;
+
+            if (learningresources[lrobj].id==0)
+            {
+              lrid = -1;
+            }
+            else {
+              lrid = learningresources[lrobj].id;
+            }
+            addlr(lo_no, la_no, learningresources[lrobj].name, lrid)
+          }
+        }
+      }
+      /*
+      // init la existing dropdowns
+      var dropdowns = $("[id^=laselect_]");
+      for (i in dropdowns)
+      {
+        console.log(dropdowns[i])
+        $(dropdowns[i]).empty();
+        //$(dropdowns[i]).append('<option value="None">-</option>');
+      }
+
+      $.each(la_txtvals, function(val, text) {
+        dropdowns.append(
+        $('<option></option>').val(val).html(text)
+        );
+      });
+      */
+    }
+
+
+    var coupling = { "couplings":[{"parent":1,"child":2}]};
+
+    var treeData = {
+    "name": "Learning Objectives",
+    "children": [{
+        "name": "Learning Objective",
+        "children": [{"name": "Learning Activity", "coupling_id": 1, "children": [{"name": "Learning Resource", "coupling_id": 1}]}]
+        }]
+    };
+
+    //var treeData = {"name":"Learning Objectives","children":[{"id":"1","name":"Learning Objective 1","children":[{"id":"la0","refid":"0","name":"Learning Activity1","children":[]}]},{"id":"2","name":"Learning Objective 2","children":[{"id":"la1","refid":"0","name":"Learning Activity2","children":[]}]},{"id":"3","name":"Learning Objective 3","children":[]}]};
+
+// Get JSON data
+//treeJSON = d3.json("flare.json", function(error, treeData) {
+    // Calculate total nodes, max label length
+    var totalNodes = 0;
+    var maxLabelLength = 0;
+    // variables for drag/drop
+    var selectedNode = null;
+    var draggingNode = null;
+    // panning variables
+    var panSpeed = 200;
+    var panBoundary = 20; // Within 20px from edges will pan when dragging.
+    // Misc. variables
+    var i = 0;
+    var duration = 750;
+    var root;
+
+    // size of the diagram
+    var viewerWidth = $(document).width();
+    var viewerHeight = $(document).height();
+
+    var tree = d3.layout.tree()
+        .size([viewerHeight, viewerWidth]);
+
+    // define a d3 diagonal projection for use by the node paths later on.
+    var diagonal = d3.svg.diagonal()
+        .projection(function(d) {
+            return [d.y, d.x];
+        });
+
+    // A recursive helper function for performing some setup by walking through all nodes
+
+    function visit(parent, visitFn, childrenFn) {
+        if (!parent) return;
+
+        visitFn(parent);
+
+        var children = childrenFn(parent);
+        if (children) {
+            var count = children.length;
+            for (var i = 0; i < count; i++) {
+                visit(children[i], visitFn, childrenFn);
+            }
+        }
+    }
+
+    // Call visit function to establish maxLabelLength
+    visit(treeData, function(d) {
+        totalNodes++;
+        maxLabelLength = Math.max(d.name.length, maxLabelLength);
+
+    }, function(d) {
+        return d.children && d.children.length > 0 ? d.children : null;
+    });
+
+    // sort the tree according to the node names
+
+    function sortTree() {
+        tree.sort(function(a, b) {
+            return b.name.toLowerCase() < a.name.toLowerCase() ? 1 : -1;
+        });
+    }
+    // Sort the tree initially incase the JSON isn't in a sorted order.
+    sortTree();
+
+    // TODO: Pan function, can be better implemented.
+
+    function pan(domNode, direction) {
+        var speed = panSpeed;
+        if (panTimer) {
+            clearTimeout(panTimer);
+            translateCoords = d3.transform(svgGroup.attr("transform"));
+            if (direction == 'left' || direction == 'right') {
+                translateX = direction == 'left' ? translateCoords.translate[0] + speed : translateCoords.translate[0] - speed;
+                translateY = translateCoords.translate[1];
+            } else if (direction == 'up' || direction == 'down') {
+                translateX = translateCoords.translate[0];
+                translateY = direction == 'up' ? translateCoords.translate[1] + speed : translateCoords.translate[1] - speed;
+            }
+            scaleX = translateCoords.scale[0];
+            scaleY = translateCoords.scale[1];
+            scale = zoomListener.scale();
+            svgGroup.transition().attr("transform", "translate(" + translateX + "," + translateY + ")scale(" + scale + ")");
+            d3.select(domNode).select('g.node').attr("transform", "translate(" + translateX + "," + translateY + ")");
+            zoomListener.scale(zoomListener.scale());
+            zoomListener.translate([translateX, translateY]);
+            panTimer = setTimeout(function() {
+                pan(domNode, speed, direction);
+            }, 50);
+        }
+    }
+
+    // Define the zoom function for the zoomable tree
+
+    function zoom() {
+        svgGroup.attr("transform", "translate(" + d3.event.translate + ")scale(" + d3.event.scale + ")");
+    }
+
+
+    // define the zoomListener which calls the zoom function on the "zoom" event constrained within the scaleExtents
+    var zoomListener = d3.behavior.zoom().scaleExtent([0.1, 3]).on("zoom", zoom);
+
+    function initiateDrag(d, domNode) {
+        draggingNode = d;
+        d3.select(domNode).select('.ghostCircle').attr('pointer-events', 'none');
+        d3.selectAll('.ghostCircle').attr('class', 'ghostCircle show');
+        d3.select(domNode).attr('class', 'node activeDrag');
+
+        svgGroup.selectAll("g.node").sort(function(a, b) { // select the parent and sort the path's
+            if (a.id != draggingNode.id) return 1; // a is not the hovered element, send "a" to the back
+            else return -1; // a is the hovered element, bring "a" to the front
+        });
+        // if nodes has children, remove the links and nodes
+        if (nodes.length > 1) {
+            // remove link paths
+            links = tree.links(nodes);
+            nodePaths = svgGroup.selectAll("path.link")
+                .data(links, function(d) {
+                    return d.target.id;
+                }).remove();
+            // remove child nodes
+            nodesExit = svgGroup.selectAll("g.node")
+                .data(nodes, function(d) {
+                    return d.id;
+                }).filter(function(d, i) {
+                    if (d.id == draggingNode.id) {
+                        return false;
+                    }
+                    return true;
+                }).remove();
+        }
+
+        // remove parent link
+        parentLink = tree.links(tree.nodes(draggingNode.parent));
+        svgGroup.selectAll('path.link').filter(function(d, i) {
+            if (d.target.id == draggingNode.id) {
+                return true;
+            }
+            return false;
+        }).remove();
+
+        dragStarted = null;
+    }
+
+    // define the baseSvg, attaching a class for styling and the zoomListener
+    var baseSvg = d3.select("#tree-container").append("svg")
+        .attr("width", viewerWidth)
+        .attr("height", viewerHeight)
+        .attr("class", "overlay")
+        .call(zoomListener);
+
+    // Define the drag listeners for drag/drop behaviour of nodes.
+    dragListener = d3.behavior.drag()
+        .on("dragstart", function(d) {
+            if (d == root) {
+                return;
+            }
+            dragStarted = true;
+            nodes = tree.nodes(d);
+            d3.event.sourceEvent.stopPropagation();
+            // it's important that we suppress the mouseover event on the node being dragged. Otherwise it will absorb the mouseover event and the underlying node will not detect it d3.select(this).attr('pointer-events', 'none');
+        })
+        .on("drag", function(d) {
+            if (d == root) {
+                return;
+            }
+            if (dragStarted) {
+                domNode = this;
+                initiateDrag(d, domNode);
+            }
+
+            // get coords of mouseEvent relative to svg container to allow for panning
+            relCoords = d3.mouse($('svg').get(0));
+            if (relCoords[0] < panBoundary) {
+                panTimer = true;
+                pan(this, 'left');
+            } else if (relCoords[0] > ($('svg').width() - panBoundary)) {
+
+                panTimer = true;
+                pan(this, 'right');
+            } else if (relCoords[1] < panBoundary) {
+                panTimer = true;
+                pan(this, 'up');
+            } else if (relCoords[1] > ($('svg').height() - panBoundary)) {
+                panTimer = true;
+                pan(this, 'down');
+            } else {
+                try {
+                    clearTimeout(panTimer);
+                } catch (e) {
+
+                }
+            }
+
+            d.x0 += d3.event.dy;
+            d.y0 += d3.event.dx;
+            var node = d3.select(this);
+            node.attr("transform", "translate(" + d.y0 + "," + d.x0 + ")");
+            updateTempConnector();
+        }).on("dragend", function(d) {
+            if (d == root) {
+                return;
+            }
+            domNode = this;
+            if (selectedNode) {
+                // now remove the element from the parent, and insert it into the new elements children
+                var index = draggingNode.parent.children.indexOf(draggingNode);
+                if (index > -1) {
+                    draggingNode.parent.children.splice(index, 1);
+                }
+                if (typeof selectedNode.children !== 'undefined' || typeof selectedNode._children !== 'undefined') {
+                    if (typeof selectedNode.children !== 'undefined') {
+                        selectedNode.children.push(draggingNode);
+                    } else {
+                        selectedNode._children.push(draggingNode);
+                    }
+                } else {
+                    selectedNode.children = [];
+                    selectedNode.children.push(draggingNode);
+                }
+                // Make sure that the node being added to is expanded so user can see added node is correctly moved
+                expand(selectedNode);
+                sortTree();
+                endDrag();
+            } else {
+                endDrag();
+            }
+        });
+
+    function endDrag() {
+        selectedNode = null;
+        d3.selectAll('.ghostCircle').attr('class', 'ghostCircle');
+        d3.select(domNode).attr('class', 'node');
+        // now restore the mouseover event or we won't be able to drag a 2nd time
+        d3.select(domNode).select('.ghostCircle').attr('pointer-events', '');
+        updateTempConnector();
+        if (draggingNode !== null) {
+            update(root);
+            centerNode(draggingNode);
+            draggingNode = null;
+        }
+    }
+
+    // Helper functions for collapsing and expanding nodes.
+
+    function collapse(d) {
+        if (d.children) {
+            d._children = d.children;
+            d._children.forEach(collapse);
+            d.children = null;
+        }
+    }
+
+    function expand(d) {
+        if (d._children) {
+            d.children = d._children;
+            d.children.forEach(expand);
+            d._children = null;
+        }
+    }
+
+    var overCircle = function(d) {
+        selectedNode = d;
+        updateTempConnector();
+    };
+    var outCircle = function(d) {
+        selectedNode = null;
+        updateTempConnector();
+    };
+
+    // Function to update the temporary connector indicating dragging affiliation
+    var updateTempConnector = function() {
+        var data = [];
+        if (draggingNode !== null && selectedNode !== null) {
+            // have to flip the source coordinates since we did this for the existing connectors on the original tree
+            data = [{
+                source: {
+                    x: selectedNode.y0,
+                    y: selectedNode.x0
+                },
+                target: {
+                    x: draggingNode.y0,
+                    y: draggingNode.x0
+                }
+            }];
+        }
+        var link = svgGroup.selectAll(".templink").data(data);
+
+        link.enter().append("path")
+            .attr("class", "templink")
+            .attr("d", d3.svg.diagonal())
+            .attr('pointer-events', 'none');
+
+        link.attr("d", d3.svg.diagonal());
+
+        link.exit().remove();
+    };
+
+    // Function to center node when clicked/dropped so node doesn't get lost when collapsing/moving with large amount of children.
+
+    function centerNode(source) {
+        scale = zoomListener.scale();
+        x = -source.y0;
+        y = -source.x0;
+        x = x * scale + viewerWidth / 2;
+        y = y * scale + viewerHeight / 2;
+        d3.select('g').transition()
+            .duration(duration)
+            .attr("transform", "translate(" + x + "," + y + ")scale(" + scale + ")");
+        zoomListener.scale(scale);
+        zoomListener.translate([x, y]);
+    }
+
+    // Toggle children function
+
+    function toggleChildren(d) {
+        if (d.children) {
+            d._children = d.children;
+            d.children = null;
+        } else if (d._children) {
+            d.children = d._children;
+            d._children = null;
+        }
+        return d;
+    }
+
+    // Toggle children on click.
+
+    function click(d) {
+        if (d3.event.defaultPrevented) return; // click suppressed
+        d = toggleChildren(d);
+        update(d);
+        centerNode(d);
+    }
+
+    function update(source) {
+        // Compute the new height, function counts total children of root node and sets tree height accordingly.
+        // This prevents the layout looking squashed when new nodes are made visible or looking sparse when nodes are removed
+        // This makes the layout more consistent.
+        var levelWidth = [1];
+        var childCount = function(level, n) {
+
+            if (n.children && n.children.length > 0) {
+                if (levelWidth.length <= level + 1) levelWidth.push(0);
+
+                levelWidth[level + 1] += n.children.length;
+                n.children.forEach(function(d) {
+                    childCount(level + 1, d);
+                });
+            }
+        };
+        childCount(0, root);
+        var newHeight = d3.max(levelWidth) * 25; // 25 pixels per line
+        tree = tree.size([newHeight, viewerWidth]);
+
+        // Compute the new tree layout.
+        var nodes = tree.nodes(root).reverse(),
+            links = tree.links(nodes);
+
+        // Set widths between levels based on maxLabelLength.
+        nodes.forEach(function(d) {
+            d.y = (d.depth * (maxLabelLength * 10)); //maxLabelLength * 10px
+            // alternatively to keep a fixed scale one can set a fixed depth per level
+            // Normalize for fixed-depth by commenting out below line
+            // d.y = (d.depth * 500); //500px per level.
+        });
+
+        // Update the nodes…
+        node = svgGroup.selectAll("g.node")
+            .data(nodes, function(d) {
+                return d.id || (d.id = ++i);
+            });
+
+        // Enter any new nodes at the parent's previous position.
+        var nodeEnter = node.enter().append("g")
+            .call(dragListener)
+            .attr("class", "node")
+            .attr("transform", function(d) {
+                return "translate(" + source.y0 + "," + source.x0 + ")";
+            })
+            .on('click', click);
+
+        nodeEnter.append("circle")
+            .attr('class', 'nodeCircle')
+            .attr("r", 0)
+            .style("fill", function(d) {
+                return d._children ? "lightsteelblue" : "#fff";
+            });
+
+        nodeEnter.append("text")
+            .attr("x", function(d) {
+                return d.children || d._children ? -10 : 10;
+            })
+            .attr("dy", ".35em")
+            .attr('class', 'nodeText')
+            .attr("text-anchor", function(d) {
+                return d.children || d._children ? "end" : "start";
+            })
+            .text(function(d) {
+                return d.name;
+            })
+            .style("fill-opacity", 0);
+
+        // phantom node to give us mouseover in a radius around it
+        /*
+        nodeEnter.append("circle")
+            .attr('class', 'ghostCircle')
+            .attr("r", 30)
+            .attr("opacity", 0.2) // change this to zero to hide the target area
+        .style("fill", "red")
+            .attr('pointer-events', 'mouseover')
+            .on("mouseover", function(node) {
+                overCircle(node);
+            })
+            .on("mouseout", function(node) {
+                outCircle(node);
+            });
+        */
+
+        nodeEnter.append("circle")
+            .attr('class', 'ghostCircle')
+            .attr("r", 30)
+            .attr("opacity", 0.2) // change this to zero to hide the target area
+            .attr('pointer-events', 'mouseover')
+            .on("mouseover", function(node) {
+                overCircle(node);
+            })
+            .on("mouseout", function(node) {
+                outCircle(node);
+            });
+
+        // Update the text to reflect whether node has children or not.
+        node.select('text')
+            .attr("x", function(d) {
+                return d.children || d._children ? -10 : 10;
+            })
+            .attr("text-anchor", function(d) {
+                return d.children || d._children ? "end" : "start";
+            })
+            .text(function(d) {
+                return d.name;
+            });
+
+        // Change the circle fill depending on whether it has children and is collapsed
+        node.select("circle.nodeCircle")
+            .attr("r", 4.5)
+            .style("fill", function(d) {
+                return d._children ? "lightsteelblue" : "#fff";
+            });
+
+        // Transition nodes to their new position.
+        var nodeUpdate = node.transition()
+            .duration(duration)
+            .attr("transform", function(d) {
+                return "translate(" + d.y + "," + d.x + ")";
+            });
+
+        // Fade the text in
+        nodeUpdate.select("text")
+            .style("fill-opacity", 1);
+
+        // Transition exiting nodes to the parent's new position.
+        var nodeExit = node.exit().transition()
+            .duration(duration)
+            .attr("transform", function(d) {
+                return "translate(" + source.y + "," + source.x + ")";
+            })
+            .remove();
+
+        nodeExit.select("circle")
+            .attr("r", 0);
+
+        nodeExit.select("text")
+            .style("fill-opacity", 0);
+
+        // Update the links…
+        var link = svgGroup.selectAll("path.link")
+            .data(links, function(d) {
+                return d.target.id;
+            });
+
+        // Enter any new links at the parent's previous position.
+        link.enter().insert("path", "g")
+            .attr("class", "link")
+            .attr("d", function(d) {
+                var o = {
+                    x: source.x0,
+                    y: source.y0
+                };
+                return diagonal({
+                    source: o,
+                    target: o
+                });
+            });
+
+        // Transition links to their new position.
+        link.transition()
+            .duration(duration)
+            .attr("d", diagonal);
+
+        // Transition exiting nodes to the parent's new position.
+        link.exit().transition()
+            .duration(duration)
+            .attr("d", function(d) {
+                var o = {
+                    x: source.x,
+                    y: source.y
+                };
+                return diagonal({
+                    source: o,
+                    target: o
+                });
+            })
+            .remove();
+
+        // Stash the old positions for transition.
+        nodes.forEach(function(d) {
+            d.x0 = d.x;
+            d.y0 = d.y;
+        });
+    }
+
+    // Append a group which holds all nodes and which the zoom Listener can act upon.
+    var svgGroup = baseSvg.append("g");
+
+    // Define the root
+    root = treeData;
+    root.x0 = viewerHeight / 2;
+    root.y0 = 0;
+
+    // Layout the tree initially and center on the root node.
+    update(root);
+    centerNode(root);
+
+    function renderDendogram()
+    {
+
+      makeDendogramTree();
+
+      //$('.overlay')[0].empty();
+      //console.log($('.overlay')[0]);
+      d3.selectAll(".overlay").remove();
+
+      tree = d3.layout.tree()
+          .size([viewerHeight, viewerWidth]);
+
+      // define a d3 diagonal projection for use by the node paths later on.
+      diagonal = d3.svg.diagonal()
+          .projection(function(d) {
+              return [d.y, d.x];
+          });
+
+
+      // define the baseSvg, attaching a class for styling and the zoomListener
+      baseSvg = d3.select("#tree-container").append("svg")
+          .attr("width", viewerWidth)
+          .attr("height", viewerHeight)
+          .attr("class", "overlay")
+          .call(zoomListener);
+
+      svgGroup = baseSvg.append("g");
+
+      // Call visit function to establish maxLabelLength
+      visit(treeData, function(d) {
+          totalNodes++;
+          maxLabelLength = Math.max(d.name.length, maxLabelLength);
+
+      }, function(d) {
+          return d.children && d.children.length > 0 ? d.children : null;
+      });
+      // Sort the tree initially incase the JSON isn't in a sorted order.
+      sortTree();
+
+      // Define the root
+      root = treeData;
+      root.x0 = viewerHeight / 2;
+      root.y0 = 0;
+
+      // Layout the tree initially and center on the root node.
+      update(root);
+      centerNode(root);
+
+    }
+
+/*
+	var couplingParent1 = tree.nodes(root).filter(function(d) {
+            return d['name'] === 'cluster';
+        })[0];
+	var couplingChild1 = tree.nodes(root).filter(function(d) {
+            return d['name'] === 'JSONConverter';
+        })[0];
+
+	multiParents = [{
+                    parent: couplingParent1,
+                    child: couplingChild1
+                }];
+
+	multiParents.forEach(function(multiPair) {
+            svgGroup.append("path", "g")
+            .attr("class", "additionalParentLink")
+                .attr("d", function() {
+                    var oTarget = {
+                        x: multiPair.parent.x0,
+                        y: multiPair.parent.y0
+                    };
+                    var oSource = {
+                        x: multiPair.child.x0,
+                        y: multiPair.child.y0
+                    };
+                    //if (multiPair.child.depth === multiPair.couplingParent1.depth) {
+                    //    return "M" + oSource.y + " " + oSource.x + " L" + (oTarget.y + ((Math.abs((oTarget.x - oSource.x))) * 0.25)) + " " + oTarget.x + " " + oTarget.y + " " + oTarget.x;
+                    //
+                    return diagonal({
+                        source: oSource,
+                        target: oTarget
+                    });
+                });
+        });
+*/
+//});
+
+/*
+    function load_data()
+    {
+      //console.log(data.courseresources);
+      //console.log(data.uniquelearningactivities);
+      la_txtvals = data.uniquelearningactivities;
+      resources_from_tree = data.courseresources;
+      var learningobjects = data.learningobjects;
+      console.log(learningobjects);
+      for (obj in learningobjects)
+      {
+        // Add LO
+        addlo(obj.name);
+        var lo_no = obj.id;
+        for (laobj in obj.learningactivities)
+        {
+          // ADD LA
+          addla(lo_no, laobj.name,laobj.refid);
+        }
+      }
+    }
+
+    function init_laselect(selectid)
+    {
+      //console.log("bind to " + selectid);
+      var dropdown = $(selectid);
+      dropdown.append('<option value="None">-</option>');
+      $.each(la_txtvals, function(val, text) {
+        dropdown.append(
+        $('<option></option>').val(val).html(text)
+        );
+      });
+    }
+
+    function bind_laselect(val, la_txt)
+    {
+      var dropdowns = $("[id^=laselect_]")
+      dropdowns.append($('<option></option>').val(val).html(la_txt));
+    }
+
+
+    function addlo(name)
+    {
+      lo_count = lo_count + 1;
+      var lo_txt = $('#loInput').val();
+      if (name="")
+      {
+        lo_txt = name;
+      }
+      $('#loInput').val("Learning Objective");
+      //alert($('#loInput').val());
+      var lo_html = '<li id="lo_' + lo_count + '"> <input id="loInput_' + lo_count + '" type="text" value="' + lo_txt + '" maxlength="160" size="160">';
+      lo_html += '<button class="btn btn-small btn-primary" onClick="removelo(' + lo_count + ')"><i class="halflings-icon remove"></i> Remove</button>';
+      lo_html += '<ol id="la_' + lo_count + '">';
+      lo_html += '<input id="addla_' + lo_count + '" type="text" value="Learning Activity" maxlength="160" size="160">';
+      lo_html += ' OR Select Existing ';
+      lo_html += ' <select id="laselect_' + lo_count + '"> </select>';
+      lo_html += '<button class="btn btn-small btn-primary" onClick="addla(' + lo_count + ')">Add</button>';
+      lo_html += '</ol>';
+      lo_html += '</li>';
+
+      $( "#los_ol" ).append( lo_html );
+      init_laselect('#laselect_' + lo_count);
+      la_counts.push(0);
+      //console.log(la_counts);
+    }
+
+    function removelo(lo_no)
+    {
+      $('#lo_'+lo_no).remove();
+      la_counts.splice(lo_no-1, 1);
+      //console.log(la_counts);
+    }
+
+    function removela(lo_no, la_no)
+    {
+      $('#'+lo_no+"_"+la_no).remove();
+      la_counts[lo_no-1] -= 1;
+      //console.log(la_counts);
+    }
+
+    function removelr(lo_no, la_no, lr_no)
+    {
+      $('#'+lo_no+"_"+la_no+"_"+lr_no).remove();
+      lr_count[lo_no + "_" + la_no] -= 1;
+      //console.log(lr_count);
+    }
+
+    function addla(lo_no, laobj.name, laobj.refid)
+    {
+      la_counts[lo_no-1] += 1;
+      la_no = la_counts[lo_no-1];
+      existing_la_no = 0;
+      var la_txt = $('#addla_' + lo_no).val();
+      drop_txt = $( "#laselect_" + lo_no ).val();
+      if (drop_txt != "None")
+      {
+          la_txt = la_txtvals[drop_txt];
+      }
+      else {
+        la_txtvals[la_no] = la_txt;
+        bind_laselect(la_no, la_txt);
+      }
+      $('#addla_' + lo_no).val("Learning Activity");
+      var la_html = '<li id="' + lo_no + '_' + la_no + '"> <input type="hidden" id="lahiddenInput_' + lo_no + '_' + la_no + '" value="' + drop_txt + '"><input id="laInput_' + lo_no + '_' + la_no + '" type="text" value="' + la_txt + '" maxlength="160" size="160">';
+      la_html += '<button class="btn btn-small btn-primary" onClick="removela(' + lo_no + ','+ la_no + ')"><i class="halflings-icon remove"></i> Remove</button>';
+      la_html += '<ol id="lr_' + lo_no + '_' + la_no + '">';
+      la_html += '<input id="addlr_' + la_no + '" type="text" value="Learning Resource" maxlength="160" size="160">';
+      la_html += '<button class="btn btn-small btn-primary" onClick="addlr(' + lo_no + ','+ la_no + ',\'\')">Add</button>';
+      la_html += 'or <button onClick="showModal(\'' + lo_no + '_' + la_no + '\')" type="button" class="btn btn-info btn-small" >Course Structure</button>';
+      la_html += '</ol>';
+      $( "#la_" + lo_no ).append( la_html );
+      lr_count[lo_no + "_" + la_no] = 0;
+      $("#laselect_" + lo_no).val('None');
+      //console.log(la_counts);
+      //console.log(la_txtvals);
+    }
+
+    function addlr(lo_no, la_no, txt)
+    {
+      lr_count[lo_no + "_" + la_no] += 1;
+      lr_no = lr_count[lo_no + "_" + la_no];
+      var lr_txt = $('#addlr_' + la_no).val();
+      var lr_tree_id = -1;
+      if (txt != "")
+      {
+        lr_txt = txt;
+        lr_tree_id = $('#selected_id').val();
+        resources_from_tree.push({id: lr_tree_id, title: lr_txt});
+      }
+      $('#addlr_' + la_no).val("Learning Resource");
+      $('#selected_id').val("-1");
+      var lr_html = '<li id="' + lo_no + '_' + la_no +  '_' + lr_no + '">';
+      if (txt == "")
+      {
+        lr_html += '<input id="lrInput_' + lo_no + '_' + la_no + '_' + lr_no +  '" type="text" value="' + lr_txt + '" maxlength="160" size="160">';
+      }
+      else {
+        lr_html += '<input id="lrInput_' + lo_no + '_' + la_no + '_' + lr_no +  '" type="hidden" value="' + lr_tree_id + '" >' + '<span id="lrTxt_' + lo_no + '_' + la_no + '_' + lr_no +  '">'+ lr_txt + '</span>';
+      }
+      lr_html += '<button class="btn btn-small btn-primary" onClick="removelr(' + lo_no + ','+ la_no + ','+ lr_no + ')"><i class="halflings-icon remove"></i> Remove</button>';
+      $( "#lr_" + lo_no + '_' + la_no ).append( lr_html );
+      //console.log(la_counts);
+      //console.log(lr_count);
+      console.log(resources_from_tree);
+    }
+
+    function showModal(id)
+    {
+      currLoLa_id = id;
+      $('#myModal').modal("show");
+      $('#jstree_demo_div')
+      // listen for event
+      .on('changed.jstree', function (e, data) {
+        var i, j, r = [], ids = [];
+        for(i = 0, j = data.selected.length; i < j; i++) {
+          console.log(data.instance.get_node(data.selected[i]));
+          r.push(data.instance.get_node(data.selected[i]).text);
+          ids.push(data.instance.get_node(data.selected[i]).id);
+        }
+        $('#selected_resource').html(r.join(', '));
+        $('#selected_id').val(ids.join(', '));
+      })
+      // create the instance
+      .jstree({ 'core' : {
+        'data' : [
+       {{json_4_jstree|safe}}
+        ]
+        },"plugins" : ["search"] });
+
+      var to = false;
+      $('#treesearch').keyup(function () {
+        if(to) { clearTimeout(to); }
+        to = setTimeout(function () {
+          var v = $('#treesearch').val();
+          $('#jstree_demo_div').jstree(true).search(v);
+        }, 250);
+      });
+    }
+
+    function closeModal()
+    {
+        $('#myModal').modal("hide");
+        var selected_resource = $('#selected_resource').html();
+        $('#selected_resource').html("None");
+        ids = currLoLa_id.split("_");
+        addlr(ids[0], ids[1], selected_resource)
+        //$('#jstree_demo_div').destroy();
+        //console.log("selected_resource: " + selected_resource)
+    }
+
+    function saveJSON()
+    {
+
+      var pedagogyhelper = {};
+
+      pedagogyhelper.courseresources = [];
+      pedagogyhelper.courseresources = resources_from_tree;
+
+      pedagogyhelper.uniquelearningactivities = la_txtvals;
+
+      var learningobjects = [];
+
+      $('#los_ol > li').each(function(){
+        var learningobject = {};
+        learningobject.id = $(this).attr('id').substring(3);
+        learningobject.name = $('#loInput_'+learningobject.id).val();
+
+        learningobject.learningactivities = [];
+
+        //$(this).find('ol > li').each(function(){
+        $('#la_' + learningobject.id + ' > li').each(function(){
+          console.log(this)
+          var learningactivity = {};
+          learningactivity.id = $(this).attr('id').split("_")[1];
+          learningactivity.refid = $('#lahiddenInput_'+learningobject.id + '_' + learningactivity.id).val();
+          learningactivity.name = $('#laInput_'+learningobject.id + '_' + learningactivity.id).val();
+
+          learningactivity.learningresources = []
+          // learning resource level
+          $('#lr_' + learningobject.id + '_' + learningactivity.id + ' > li').each(function(){
+            var learningresource = {};
+            var htmlid = $(this).attr('id').split("_")[2];
+            console.log(htmlid);
+            learningresource.id = $('#lrInput_'+ learningobject.id + '_' + learningactivity.id+ '_' + htmlid).val();
+            learningresource.name = $('#lrTxt_'+ learningobject.id + '_' + learningactivity.id+ '_' + htmlid).html();
+            learningactivity.learningresources.push(learningresource);
+          });
+
+          learningobject.learningactivities.push(learningactivity);
+        });
+
+        learningobjects.push(learningobject);
+      });
+
+      pedagogyhelper.learningobjects = [];
+      pedagogyhelper.learningobjects = learningobjects;
+
+      var learningobjectsJson = JSON.stringify(pedagogyhelper);
+      console.log(learningobjectsJson);
+      alert(learningobjectsJson);
+    }
+*/
+
+/*
+from tables - not working
+    function addlo(lo_txt)
+    {
+      lo_count = lo_count + 1;
+      var lo_html = '<tr id="lo_' + lo_count + '">';
+      lo_html += '<td>' + lo_count + ' <input name="name_loInput_' + lo_count + '" id="loInput_' + lo_count + '" type="text" value="' + lo_txt + '" maxlength="160" size="160">';
+      lo_html += '<button name="sss" class="btn btn-small btn-primary" onClick="removelo(' + lo_count + ')"><i class="halflings-icon remove"></i> Remove</button> </td>';
+
+
+      lo_html += '<td><input name="name_addla_' + lo_count + ' id="addla_' + lo_count + '" type="text" value="Learning Activity" maxlength="160" size="160">';
+      lo_html += ' OR Select Existing ';
+      lo_html += ' <select name="name_laselect_' + lo_count + ' id="laselect_' + lo_count + '"> </select>';
+      lo_html += '<button class="btn btn-small btn-primary" onClick="addla(' + lo_count + ')">Add</button></td>';
+      lo_html += '<td>&nbsp;</td>'
+
+      //lo_html += '<td></td>'
+      //lo_html += '<td></td>'
+      lo_html += '</tr>';
+
+      $('#tbl > tbody > tr').eq(lo_count-1).after(lo_html);
+
+      init_laselect('#laselect_' + lo_count);
+      la_counts.push(0);
+    }
+
+function removelo(lo_no)
+{
+  document.getElementById('tbl').deleteRow(lo_no);
+  //$('#tbl > tbody > tr').eq(lo_count).empty();
+  try {
+    //$('#lo_'+lo_no).empty(); //remove();
+  } catch (e) {
+
+  } finally {
+
+  }
+
+  //la_counts.splice(lo_no-1, 1);
+}
+*/
+    $(function () {
+      {% if pedagogyhelper_json != '{}' %}
+      load_data();
+      //renderDendogram();
+      {% endif %}
+    });
+
+    </script>
+{% endblock %}
