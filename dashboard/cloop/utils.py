@@ -18,7 +18,7 @@ from sqlalchemy import create_engine
 from collections import defaultdict
 
 
-def get_contenttypes():
+def get_contenttypes(course_type):
     communication_types = None
     assessment_types = None
     if course_type == "Moodle":

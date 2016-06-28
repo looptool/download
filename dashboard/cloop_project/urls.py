@@ -17,5 +17,7 @@ urlpatterns = [
     url(r'^coursestructure/$', 'cloop.views.coursestructure', name='coursestructure'),
     url(r'^communication/$', 'cloop.views.communication', name='communication'),
     url(r'^assessment/$', 'cloop.views.assessment', name='assessment'),
+    url(r'^pedagogyhelper/$', 'cloop.views.pedagogyhelper', name='pedagogyhelper'),
+    url(r'^pedagogyhelperdownload/$', 'cloop.views.pedagogyhelperdownload', name='pedagogyhelperdownload'),
     url(r'^logout/$', 'django.contrib.auth.views.logout', {'next_page': '/'})
 ]

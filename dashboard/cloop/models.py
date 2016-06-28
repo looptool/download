@@ -60,3 +60,7 @@ class CourseRepeatingEvent(models.Model):
 
     def __unicode__(self):
         return self.title
+
+class PedagogyHelper(models.Model):
+    pedagogyhelper_json = models.TextField(blank=False)
+    course = models.ForeignKey(Course)

@@ -869,6 +869,9 @@ def generate_contentaccesstable(course_id, contentdisplaytype, displaytype, upda
 
     global week_totals
 
+    forum_hidden_list = ""
+    submission_hidden_list = ""
+
     weeks_str_list = ','.join(map(str, course_weeks))
 
     week_totals = [0] * len(course_weeks)

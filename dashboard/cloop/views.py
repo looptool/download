@@ -11,7 +11,7 @@ from django.contrib.auth import logout
 from django.contrib.auth.models import User
 from django.template import RequestContext
 from django.db import connections
-from cloop.models import Course, CourseRepeatingEvent, CourseSingleEvent, CourseSubmissionEvent
+from cloop.models import Course, CourseRepeatingEvent, CourseSingleEvent, CourseSubmissionEvent, PedagogyHelper
 from utils import *
 
 def home(request):
@@ -43,7 +43,7 @@ def home(request):
     else:
         # No context variables to pass to the template system, hence the
         # blank dictionary object...
-        return render_to_response('home/home.html', {}, context)
+        return render_to_response('home.html', {}, context)
 
 @login_required
 def mycourses(request):
@@ -51,7 +51,7 @@ def mycourses(request):
     curuser = request.user
     all_courses = Course.objects.filter(owner=curuser)
     context_dict = {'courses': all_courses}
-    return render_to_response('home/mycourses.html', context_dict, context)
+    return render_to_response('mycourses.html', context_dict, context)
 
 @login_required
 def pedagogyhelper(request):
@@ -110,7 +110,7 @@ def pedagogyhelper(request):
         json_4_jstree += '{ "id" : "%d", "parent" : "%s", "text" : "%s" },' % (itemid, adjustedparentid, title)
 
     context_dict = {'course_id':course_id, 'course_code': course_code, 'course_title':course_title, 'course_type':course_type, 'json_4_jstree':json_4_jstree, 'pedagogyhelper_json':pedagogyhelper_json}
-    return render_to_response('home/pedagogyhelper.html', context_dict, context)
+    return render_to_response('pedagogyhelper.html', context_dict, context)
 
 from docx import Document
 from django.http import HttpResponse
@@ -330,7 +330,7 @@ def coursedashboard(request):
 
     histogram = generate_userbyweek_histogram(week_id, course_id)
 
-    communication_types, assessment_types, communication_types_str, assessment_types_str = get_contenttypes()
+    communication_types, assessment_types, communication_types_str, assessment_types_str = get_contenttypes(course_type)
 
     excluse_contentype_list = communication_types + assessment_types
     excluse_contentype_str = ','.join("'{0}'".format(x) for x in excluse_contentype_list)
@@ -383,7 +383,7 @@ def coursedashboard(request):
 
     context_dict = {'repeatingevents': rpt_evt_lst, 'course_weeks': course_weeks, 'week_id': week_id, 'weekbeg': weekbeg, 'weekend': weekend, 'PageViewGraphContentList': PageViewGraphContentList, 'PageViewGraphCommunicationList': PageViewGraphCommunicationList, 'PageViewGraphAssessmentList': PageViewGraphAssessmentList, 'PageViewGraphUniqueViewsList': PageViewGraphUniqueViewsList, 'histogram_labels': histogram["labels"], 'histogram_values': histogram["values"], 'sessionsbydayinweek': averagepagespersessionbydayinweek, 'averagesessionlengthbydayinweek': averagesessionlengthbydayinweek, 'averagepagespersessionbydayinweek':averagepagespersessionbydayinweek, 'topusers_table': topusers_table, 'topcontent_table': topcontent_table, 'topforumcontent_table': topforumcontent_table,  'topquizcontent_table': topquizcontent_table, 'course_id': course_id, 'course_code': course_code, 'course_title': course_title, 'week_no': week_no, 'uniquepageviewsbydayinweek': uniquepageviewsbydayinweek, 'participantsbydayinweek': participantsbydayinweek}
 
-    return render_to_response('home/coursedashboard.html', context_dict, context)
+    return render_to_response('coursedashboard.html', context_dict, context)
 
 @login_required
 def overallcoursedashboard(request):
@@ -404,7 +404,7 @@ def overallcoursedashboard(request):
 
     weeks = ','.join(map(str, course_weeks))
 
-    communication_types, assessment_types, communication_types_str, assessment_types_str = get_contenttypes()
+    communication_types, assessment_types, communication_types_str, assessment_types_str = get_contenttypes(course_type)
 
     excluse_contentype_list = communication_types + assessment_types
     excluse_contentype_str = ','.join("'{0}'".format(x) for x in excluse_contentype_list)
@@ -467,7 +467,7 @@ def overallcoursedashboard(request):
 
     context_dict = {'sng_evt_flags': sng_evt_flags, 'sub_evt_flags':sub_evt_flags, 'contentviews': contentviews, 'communicationviews': communicationviews, 'assessmentviews':assessmentviews, 'course_weeks': course_weeks, 'week_id': -1, 'histogram_labels': histogram["labels"], 'histogram_values': histogram["values"], 'topusers_table': topusers_table, 'topcontent_table': topcontent_table, 'topforumcontent_table': topforumcontent_table,  'topquizcontent_table': topquizcontent_table, 'course_id': course_id, 'course_code': course_code, 'course_title': course_title}
 
-    return render_to_response('home/overallcoursedashboard.html', context_dict, context)
+    return render_to_response('overallcoursedashboard.html', context_dict, context)
 
 @login_required
 def coursemembers(request):
@@ -526,7 +526,7 @@ def coursemembers(request):
 
     context_dict = {'showeventtab': showeventtab, 'opts': opts, 'repeating_evt':repeating_evt, 'course_id': course_id, 'course_code': course_code, 'course_title': course_title, 'users_counts_table': users_counts_table, 'users_vis_table': users_vis_table}
 
-    return render_to_response('home/coursemembers.html', context_dict, context)
+    return render_to_response('coursemembers.html', context_dict, context)
 
 
 @login_required
@@ -555,7 +555,7 @@ def coursestructure(request):
 
     context_dict = {'repeating_evt': repeating_evt, 'course_id': course_id, 'course_code': course_code, 'course_title': course_title, 'access_counts_table': access_counts_table, 'access_vis_table': access_vis_table}
 
-    return render_to_response('home/coursestructure.html', context_dict, context)
+    return render_to_response('coursestructure.html', context_dict, context)
 
 @login_required
 def coursemember(request):
@@ -610,7 +610,7 @@ def coursemember(request):
 
     user_id = int(member_id[2:(len(member_id))])
 
-    communication_types, assessment_types, communication_types_str, assessment_types_str = get_contenttypes()
+    communication_types, assessment_types, communication_types_str, assessment_types_str = get_contenttypes(course_type)
 
     excluse_contentype_list = communication_types + assessment_types
     excluse_contentype_str = ','.join("'{0}'".format(x) for x in excluse_contentype_list)
@@ -650,7 +650,7 @@ def coursemember(request):
 
     context_dict = {'range_str': range_str, 'startUTC': startUTC, 'endUTC': endUTC, 'sng_evt_flags': sng_evt_flags, 'sub_evt_flags':sub_evt_flags, 'topforumcontent_table': topforumcontent_table, 'topquizcontent_table': topquizcontent_table, 'contentviews': contentviews, 'communicationsviews':communicationsviews, 'assessmentviews':assessmentviews, 'course_id': course_id, 'course_code': course_code, 'course_title': course_title, 'member_id':member_id, 'user_id': user_id, 'firstname':firstname, 'surname':surname, 'email':email, 'role':role}
 
-    return render_to_response('home/coursemember.html', context_dict, context)
+    return render_to_response('coursemember.html', context_dict, context)
 
 @login_required
 def coursepage(request):
@@ -706,7 +706,7 @@ def coursepage(request):
 
     weeks = ','.join(map(str, course_weeks))
 
-    communication_types, assessment_types, communication_types_str, assessment_types_str = get_contenttypes()
+    communication_types, assessment_types, communication_types_str, assessment_types_str = get_contenttypes(course_type)
 
     excluse_contentype_list = communication_types + assessment_types
     excluse_contentype_str = ','.join("'{0}'".format(x) for x in excluse_contentype_list)
@@ -732,7 +732,7 @@ def coursepage(request):
 
     context_dict = {'range_str': range_str, 'startUTC': startUTC, 'endUTC': endUTC, 'sng_evt_flags': sng_evt_flags, 'sub_evt_flags':sub_evt_flags, 'no_posts': no_posts, 'attempts': attempts, 'averagestudentscore': averagestudentscore, 'histogram_labels': histogram["labels"], 'histogram_values': histogram["values"], 'user_noaccess_table': user_noaccess_table, 'contentviews': contentviews, 'course_id': course_id, 'course_code': course_code, 'course_title': course_title, 'page_id':page_id, 'title':title, 'content_type':content_type, 'section_order': section_order, 'communication_types':communication_types, 'assessment_types': assessment_types }
 
-    return render_to_response('home/coursepage.html',context_dict , context)
+    return render_to_response('coursepage.html',context_dict , context)
 
 @login_required
 def content(request):
@@ -794,7 +794,7 @@ def content(request):
 
     context_dict = {'vis_table': vis_table, 'showeventtab': showeventtab, 'opts': opts, 'repeating_evt':repeating_evt,'course_id': course_id, 'course_code': course_code, 'course_title': course_title, 'content_counts_table': content_counts_table, 'content_user_table': content_user_table}
 
-    return render_to_response('home/content.html',context_dict , context)
+    return render_to_response('content.html',context_dict , context)
 
 @login_required
 def communication(request):
@@ -854,7 +854,7 @@ def communication(request):
 
     context_dict = {'vis_table': vis_table, 'showeventtab': showeventtab, 'opts': opts, 'repeating_evt':repeating_evt, 'course_id': course_id, 'course_code': course_code, 'course_title': course_title, 'communication_counts_table': communication_counts_table, 'communication_user_table': communication_user_table, 'forum_posts_table': forum_posts_table}
 
-    return render_to_response('home/communication.html',context_dict , context)
+    return render_to_response('communication.html',context_dict , context)
 
 @login_required
 def assessment(request):
@@ -914,7 +914,7 @@ def assessment(request):
 
     context_dict = {'vis_table': vis_table, 'showeventtab': showeventtab, 'opts': opts, 'repeating_evt':repeating_evt, 'course_id': course_id, 'course_code': course_code, 'course_title': course_title, 'assessment_counts_table': assessment_counts_table, 'assessment_user_table': assessment_user_table, 'assessment_grades_table': assessment_grades_table}
 
-    return render_to_response('home/assessment.html',context_dict , context)
+    return render_to_response('assessment.html',context_dict , context)
 
 @login_required
 def loggedout(request):
