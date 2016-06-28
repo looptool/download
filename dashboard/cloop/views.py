@@ -54,6 +54,136 @@ def mycourses(request):
     return render_to_response('home/mycourses.html', context_dict, context)
 
 @login_required
+def pedagogyhelper(request):
+    context = RequestContext(request)
+
+    curuser = request.user
+
+    course_id = None
+    pedagogyhelper_json = '{}'
+    save_pedagogyhelper_json = False
+
+    if request.method == 'POST':
+        course_id = int(request.POST['course_id'])
+        pedagogyhelper_json = request.POST['pedagogyhelper_json']
+        save_pedagogyhelper_json = True
+    else:
+        course_id = int(request.GET.get('course_id'))
+
+    course = Course.objects.get(pk=course_id)
+    course_code = course.code
+    course_title = course.title
+    course_type = course.lms_type
+
+    if save_pedagogyhelper_json:
+        pedagogyhelper_obj, created = PedagogyHelper.objects.update_or_create(course=course,defaults={'pedagogyhelper_json': pedagogyhelper_json})
+        #pedagogyhelper_obj = PedagogyHelper(pedagogyhelper_json=pedagogyhelper_json, )
+        #pedagogyhelper_obj.save()
+    else:
+        pedagogyhelper_objs = PedagogyHelper.objects.filter(course=course_id)
+        print "pedagogyhelper_objs", pedagogyhelper_objs
+        if (len(pedagogyhelper_objs) > 0):
+            pedagogyhelper_json = pedagogyhelper_objs[0].pedagogyhelper_json
+            print "from database", pedagogyhelper_json
+
+    cursor = connections['olap'].cursor()
+
+    sql = "SELECT sitetree FROM summary_courses WHERE course_id=%d" % (course_id)
+    cursor.execute(sql);
+    rows = cursor.fetchall()
+    treelist_json = rows[0][0]
+    #print treelist_json
+    treelist  = json.loads(treelist_json)
+    json_4_jstree = ""
+    for courseitem in treelist:
+        #print courseitem
+        itemid = courseitem[0]
+        parentid = courseitem[1]
+        adjustedparentid = str(parentid)
+        if parentid==0:
+            adjustedparentid = "#"
+        #get title and type
+        res_sql = "SELECT title, content_type FROM dim_pages WHERE content_id=%d AND course_id=%d;" %(itemid, course_id)
+        row_count = cursor.execute(res_sql);
+        row = cursor.fetchall()
+        title = "%s (%s)" % (row[0][0],row[0][1])
+        json_4_jstree += '{ "id" : "%d", "parent" : "%s", "text" : "%s" },' % (itemid, adjustedparentid, title)
+
+    context_dict = {'course_id':course_id, 'course_code': course_code, 'course_title':course_title, 'course_type':course_type, 'json_4_jstree':json_4_jstree, 'pedagogyhelper_json':pedagogyhelper_json}
+    return render_to_response('home/pedagogyhelper.html', context_dict, context)
+
+from docx import Document
+from django.http import HttpResponse
+from docx.shared import Inches
+
+def pedagogyhelperdownload(request):
+    context = RequestContext(request)
+    #PedagogyHelper.objects.all().delete()
+    course_id = None
+    pedagogyhelper_json = '{}'
+
+    if request.method == 'POST':
+        course_id = int(request.POST['course_id'])
+        pedagogyhelper_json = request.POST['pedagogyhelper_exportjson']
+        save_pedagogyhelper_json = True
+    else:
+        course_id = int(request.GET.get('course_id'))
+
+    course = Course.objects.get(pk=course_id)
+    course_code = course.code
+    course_title = course.title
+    course_type = course.lms_type
+
+    if save_pedagogyhelper_json:
+        pedagogyhelper_obj, created = PedagogyHelper.objects.update_or_create(course=course,defaults={'pedagogyhelper_json': pedagogyhelper_json})
+        #pedagogyhelper_obj = PedagogyHelper(pedagogyhelper_json=pedagogyhelper_json, course=course)
+        #pedagogyhelper_obj.save()
+
+    pedagogyhelper_objs = PedagogyHelper.objects.filter(course=course_id)
+
+    pedagogyhelper_json = "{}"
+    if (len(pedagogyhelper_objs) > 0):
+        pedagogyhelper_json = pedagogyhelper_objs[0].pedagogyhelper_json
+
+    document = Document()
+
+    title = "%s: %s" % (course_code, course_title)
+
+    document.add_heading(title, 0)
+
+    if pedagogyhelper_json != "{}":
+
+        pedagogyhelper  = json.loads(pedagogyhelper_json)
+
+        table = document.add_table(rows=1, cols=3)
+        table.style = 'TableGrid'
+        hdr_cells = table.rows[0].cells
+        hdr_cells[0].text = 'Learning Objectives'
+        hdr_cells[1].text = 'Learning Activities'
+        hdr_cells[2].text = 'Learning Resources'
+        for lo in pedagogyhelper['learningobjects']:
+            row_cells = table.add_row().cells
+            row_cells[0].text = "%s. %s" % (lo['id'], lo['name'])
+            row_cells[1].text = ''
+            row_cells[2].text = ''
+            for la in lo['learningactivities']:
+                row_cells = table.add_row().cells
+                row_cells[0].text = ''
+                row_cells[1].text = "%d. %s" % (int(la['id'])+1, la['name'])
+                row_cells[2].text = ''
+                for lr in la['learningresources']:
+                    row_cells = table.add_row().cells
+                    row_cells[0].text = ''
+                    row_cells[1].text = ''
+                    row_cells[2].text = "%d. %s" % (int(lr['id'])+1, lr['name'])
+
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+    response['Content-Disposition'] = 'attachment; filename=download.docx'
+    document.save(response)
+
+    return response
+
+@login_required
 def coursedashboard(request):
     context = RequestContext(request)
 
