@@ -38,7 +38,7 @@ def get_contenttypes(course_type):
 
 def get_prepostevent_treetable(course_id, course_weeks, treelist_json, curr_evt, course_type):
 
-    communication_types, assessment_types, communication_types_str, assessment_types_str = get_contenttypes()
+    communication_types, assessment_types, communication_types_str, assessment_types_str = get_contenttypes(course_type)
 
     engine = create_engine('mysql://root:root@localhost/cloop_olap?unix_socket=/Applications/MAMP/tmp/mysql/mysql.sock', echo=False)
     sql = "SELECT F.user_id, F.page_id, F.pageview, D.date_week, D.date_dayinweek FROM fact_coursevisits F INNER JOIN dim_dates  D ON F.Date_Id = D.Id WHERE F.course_id=%d"%(course_id)
@@ -124,7 +124,7 @@ def get_prepostevent_table(course_id, curr_evt, contenttype, course_weeks, cours
 
     weeks_str_list = ','.join(map(str, course_weeks))
 
-    communication_types, assessment_types, communication_types_str, assessment_types_str = get_contenttypes()
+    communication_types, assessment_types, communication_types_str, assessment_types_str = get_contenttypes(course_type)
 
     if (contenttype == "communication" or contenttype == "forum"):
         #contenttype = "'forum'"
