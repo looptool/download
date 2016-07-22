@@ -10,9 +10,7 @@ The Loop Tool consists of the following 2 components:
   * Built as web app using Django
 
 Documents:
-* Installation Guide
-  * available soon
-* User Guide
-  * available soon
+* [Installation Guide](http://melbourne-cshe.unimelb.edu.au/__data/assets/pdf_file/0003/2029242/LoopTool_InstallationGuide.pdf)
+* [User Guide](http://melbourne-cshe.unimelb.edu.au/__data/assets/pdf_file/0004/2029243/LoopTool_Userguide.pdf)
 
 More details: [Completing the Loop: Returning Meaningful Learning Analytic Data to Teachers](http://melbourne-cshe.unimelb.edu.au/research/edutech/completing-the-loop)
