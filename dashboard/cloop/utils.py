@@ -16,7 +16,7 @@ import json
 import pandas as pd
 from sqlalchemy import create_engine
 from collections import defaultdict
-
+from django.conf import settings
 
 def get_contenttypes(course_type):
     communication_types = None
@@ -36,11 +36,19 @@ def get_contenttypes(course_type):
 
     return  communication_types, assessment_types, communication_types_str, assessment_types_str
 
+def getOLAPconnection():
+    username = settings.DATABASES['olap']['USER']
+    password = settings.DATABASES['olap']['PASSWORD']
+    databasename = settings.DATABASES['olap']['NAME']
+    host = settings.DATABASES['olap']['HOST']
+    connection_string = 'mysql://%s:%s@%s/%s' % (username, password, host, databasename)
+    return connection_string
+
 def get_prepostevent_treetable(course_id, course_weeks, treelist_json, curr_evt, course_type):
 
     communication_types, assessment_types, communication_types_str, assessment_types_str = get_contenttypes(course_type)
 
-    engine = create_engine('mysql://root:root@localhost/cloop_olap?unix_socket=/Applications/MAMP/tmp/mysql/mysql.sock', echo=False)
+    engine = create_engine(getOLAPconnection(), echo=False)
     sql = "SELECT F.user_id, F.page_id, F.pageview, D.date_week, D.date_dayinweek FROM fact_coursevisits F INNER JOIN dim_dates  D ON F.Date_Id = D.Id WHERE F.course_id=%d"%(course_id)
     connection = engine.raw_connection()
     df = pd.read_sql(sql, connection)
@@ -151,7 +159,7 @@ def get_prepostevent_table(course_id, curr_evt, contenttype, course_weeks, cours
     result = cursor.fetchall()
     cursor.close()
 
-    engine = create_engine('mysql://root:root@localhost/cloop_olap29?unix_socket=/Applications/MAMP/tmp/mysql/mysql.sock', echo=False)
+    engine = create_engine(getOLAPconnection(), echo=False)
     sql = "SELECT F.user_id, F.page_id, F.pageview, D.date_week, D.date_dayinweek  FROM fact_coursevisits F INNER JOIN dim_dates  D ON F.Date_Id = D.Id WHERE F.course_id=%d"%(course_id)
     connection = engine.raw_connection()
     df = pd.read_sql(sql, connection)
@@ -201,7 +209,7 @@ def getusers_prepostevent_table(course_id, curr_evt, course_weeks):
     result = cursor.fetchall()
     cursor.close()
 
-    engine = create_engine('mysql://root:root@localhost/cloop_olap?unix_socket=/Applications/MAMP/tmp/mysql/mysql.sock', echo=False)
+    engine = create_engine(getOLAPconnection(), echo=False)
     sql2 = "SELECT F.user_id, F.page_id, F.pageview, D.date_week, D.date_dayinweek FROM fact_coursevisits F INNER JOIN dim_dates  D ON F.Date_Id = D.Id WHERE F.course_id=%d"%(course_id)
     connection = engine.raw_connection()
     df = pd.read_sql(sql2, connection)
