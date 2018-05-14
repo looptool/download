@@ -1,4 +1,8 @@
 # The Loop Tool
+
+*The University of Melbourne has developed a new version of Loop Tool. Please visit the new Github repository:* [https://github.com/completing-the-loop/loop-tool-dashboard](https://github.com/completing-the-loop/loop-tool-dashboard)
+
+
 Learning Analytics Tool for Blackboard and Moodle
 
 The Loop Tool consists of the following 2 components:
